@@ -2879,9 +2879,7 @@ main (int argc, char **argv)
         out_stat = tmp_stat;
       else if (S_ISCHR (tmp_stat.st_mode))
         {
-          struct stat null_stat;
-          if (stat ("/dev/null", &null_stat) == 0
-              && SAME_INODE (tmp_stat, null_stat))
+          if (win_is_null_output (STDOUT_FILENO))
             dev_null_output = true;
           else
             possibly_tty = true;

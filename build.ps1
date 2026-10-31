@@ -23,5 +23,5 @@ $objects = foreach ($src in $Sources) {
 }
 
 $Lib = 'lib\libgreputils.a'
-& gcc @objects $Lib $Lib -liconv -static '-Wl,--stack,8388608' -o (Join-Path $Build 'grep.exe')
+& gcc @objects $Lib $Lib -liconv -lntdll -static '-Wl,--stack,8388608' -o (Join-Path $Build 'grep.exe')
 if ($LASTEXITCODE -ne 0) { Write-Host "Link failed" -ForegroundColor Red; exit $LASTEXITCODE }
