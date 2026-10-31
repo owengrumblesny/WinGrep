@@ -1,0 +1,28 @@
+#include <winver.h>
+
+1 24 "win/wingrep.manifest"
+
+1 VERSIONINFO
+FILEVERSION 3,9,0,0
+PRODUCTVERSION 3,9,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "WinGrep, GNU grep using Windows APIs"
+      VALUE "FileVersion", "3.9"
+      VALUE "InternalName", "grep"
+      VALUE "LegalCopyright", "GNU GPLv3. Based on GNU grep, Free Software Foundation, Inc."
+      VALUE "OriginalFilename", "grep.exe"
+      VALUE "ProductName", "WinGrep"
+      VALUE "ProductVersion", "3.9"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

@@ -49,6 +49,19 @@ try {
     $objects = @($Sources | ForEach-Object { Build-Object $_ @('-Wall') })
     $objects += @($LibSources | ForEach-Object { Build-Object $_ @('-w') })
 
+    # The manifest makes UTF-8 the process code page and allows long paths.
+    $Resource = Join-Path $Build 'wingrep.res.o'
+    $stale = -not (Test-Path $Resource)
+    foreach ($src in 'win\wingrep.rc', 'win\wingrep.manifest') {
+        if (-not $stale) { $stale = (Get-Item $src).LastWriteTime -gt (Get-Item $Resource).LastWriteTime }
+    }
+    if ($stale) {
+        Write-Host "RC win\wingrep.rc"
+        & windres win\wingrep.rc -O coff -o $Resource
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    $objects += $Resource
+
     & gcc @objects -liconv -lntdll -static '-Wl,--stack,8388608' -o (Join-Path $Build 'grep.exe')
     if ($LASTEXITCODE -ne 0) { Write-Host "Link failed" -ForegroundColor Red; exit $LASTEXITCODE }
 }

@@ -2471,6 +2471,7 @@ main (int argc, char **argv)
   FILE *fp;
   exit_failure = EXIT_TROUBLE;
   initialize_main (&argc, &argv);
+  win_init ();
 
   /* Which command-line options have been specified for filename output.
      -1 for -h, 1 for -H, 0 for neither.  */
@@ -2980,6 +2981,7 @@ init_colorize ();
                                 &match_size, NULL) == 0)
                       == out_invert);
 
+  win_expand_operands (&argc, &argv, optind);
   int num_operands = argc - optind;
   out_file = (filename_option == 0 && num_operands <= 1
               ? - (directories == RECURSE_DIRECTORIES)

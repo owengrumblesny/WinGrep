@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <wchar.h>
 #include <io.h>
 #include <windows.h>
 #include <winternl.h>
@@ -15,6 +16,27 @@
 #include "filename.h"
 #include "unistd-safer.h"
 #include "xalloc.h"
+
+static UINT saved_console_cp;
+
+static void
+restore_console (void)
+{
+  if (saved_console_cp)
+    SetConsoleOutputCP (saved_console_cp);
+}
+
+/* The console code page belongs to the terminal and outlives this process,
+   so put it back on the way out.  */
+void
+win_init (void)
+{
+  saved_console_cp = GetConsoleOutputCP ();
+  if (saved_console_cp && SetConsoleOutputCP (CP_UTF8))
+    atexit (restore_console);
+  else
+    saved_console_cp = 0;
+}
 
 long
 win_page_size (void)
@@ -123,13 +145,144 @@ errno_from_win32 (DWORD err)
     }
 }
 
+static WCHAR *
+wide_from_utf8 (char const *s)
+{
+  int len = MultiByteToWideChar (CP_ACP, 0, s, -1, NULL, 0);
+  WCHAR *wide = xnmalloc (len, sizeof *wide);
+  MultiByteToWideChar (CP_ACP, 0, s, -1, wide, len);
+  return wide;
+}
+
+/* Return a path that works past MAX_PATH, taking ownership of WIDE.
+   The longPathAware manifest setting only helps if the user has also turned
+   it on in the registry, whereas a \\?\ prefix always works.  */
+static WCHAR *
+long_path (WCHAR *wide)
+{
+  enum { DIRECTORY_LIMIT = 248 };
+  DWORD len;
+  WCHAR *full, *result;
+
+  if (wcslen (wide) < DIRECTORY_LIMIT || wcsncmp (wide, L"\\\\?\\", 4) == 0)
+    return wide;
+
+  len = GetFullPathNameW (wide, 0, NULL, NULL);
+  if (! len)
+    return wide;
+  full = xnmalloc (len, sizeof *full);
+  GetFullPathNameW (wide, len, full, NULL);
+  result = xnmalloc (len + 8, sizeof *result);
+  if (wcsncmp (full, L"\\\\", 2) == 0)
+    {
+      wcscpy (result, L"\\\\?\\UNC\\");
+      wcscat (result, full + 2);
+    }
+  else
+    {
+      wcscpy (result, L"\\\\?\\");
+      wcscat (result, full);
+    }
+  free (full);
+  free (wide);
+  return result;
+}
+
+/* Copy UTF-16 file H, whose read position is just past its byte order mark,
+   into a temporary UTF-8 file.  Grep works on bytes and would otherwise see
+   every other byte as NUL.  Return the new handle after closing H, or
+   INVALID_HANDLE_VALUE, leaving H open, if the file cannot be converted.  */
+static HANDLE
+utf8_copy_of_utf16 (HANDLE h, bool big_endian)
+{
+  enum { MAX_CONVERTED_SIZE = 1 << 30 };
+  LARGE_INTEGER size;
+  WCHAR dir[MAX_PATH + 1], name[MAX_PATH + 1];
+  WCHAR *text;
+  char *utf8;
+  DWORD got, wrote, units;
+  int utf8_len;
+  HANDLE tmp;
+
+  if (! GetFileSizeEx (h, &size) || size.QuadPart > MAX_CONVERTED_SIZE)
+    return INVALID_HANDLE_VALUE;
+
+  text = xmalloc (size.QuadPart + sizeof (WCHAR));
+  if (! ReadFile (h, text, size.QuadPart, &got, NULL))
+    {
+      free (text);
+      return INVALID_HANDLE_VALUE;
+    }
+  units = got / sizeof (WCHAR);
+  if (big_endian)
+    for (DWORD i = 0; i < units; i++)
+      text[i] = text[i] << 8 | text[i] >> 8;
+
+  utf8_len = WideCharToMultiByte (CP_UTF8, 0, text, units, NULL, 0, NULL, NULL);
+  utf8 = xmalloc (utf8_len + 1);
+  WideCharToMultiByte (CP_UTF8, 0, text, units, utf8, utf8_len, NULL, NULL);
+  free (text);
+
+  if (! GetTempPathW (MAX_PATH + 1, dir)
+      || ! GetTempFileNameW (dir, L"wgr", 0, name))
+    {
+      free (utf8);
+      return INVALID_HANDLE_VALUE;
+    }
+  tmp = CreateFileW (name, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+                     CREATE_ALWAYS,
+                     FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+                     NULL);
+  if (tmp == INVALID_HANDLE_VALUE
+      || ! WriteFile (tmp, utf8, utf8_len, &wrote, NULL)
+      || SetFilePointer (tmp, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+    {
+      if (tmp != INVALID_HANDLE_VALUE)
+        CloseHandle (tmp);
+      free (utf8);
+      return INVALID_HANDLE_VALUE;
+    }
+  free (utf8);
+  CloseHandle (h);
+  return tmp;
+}
+
+/* Deal with a byte order mark at the start of H.  Leave the read position
+   past a UTF-8 mark so that ^ matches the first line, and swap UTF-16 for a
+   UTF-8 copy.  -U asks for the raw bytes, so it skips all of this.  */
+static HANDLE
+handle_byte_order_mark (HANDLE h, int flags)
+{
+  unsigned char mark[3];
+  DWORD got;
+
+  if (flags & O_BINARY || GetFileType (h) != FILE_TYPE_DISK
+      || ! ReadFile (h, mark, sizeof mark, &got, NULL))
+    return h;
+
+  if (got == 3 && mark[0] == 0xEF && mark[1] == 0xBB && mark[2] == 0xBF)
+    return h;
+
+  if (2 <= got && ((mark[0] == 0xFF && mark[1] == 0xFE)
+                   || (mark[0] == 0xFE && mark[1] == 0xFF)))
+    {
+      HANDLE copy;
+      SetFilePointer (h, 2, NULL, FILE_BEGIN);
+      copy = utf8_copy_of_utf16 (h, mark[0] == 0xFE);
+      if (copy != INVALID_HANDLE_VALUE)
+        return copy;
+    }
+
+  SetFilePointer (h, 0, NULL, FILE_BEGIN);
+  return h;
+}
+
 int
 win_openat (int dirfd, char const *name, int flags)
 {
   char *joined = NULL;
   char const *path = name;
   WCHAR *wide;
-  int wide_len;
   int fd;
   HANDLE h;
   DWORD err;
@@ -146,9 +299,7 @@ win_openat (int dirfd, char const *name, int flags)
       path = joined;
     }
 
-  wide_len = MultiByteToWideChar (CP_ACP, 0, path, -1, NULL, 0);
-  wide = xnmalloc (wide_len, sizeof *wide);
-  MultiByteToWideChar (CP_ACP, 0, path, -1, wide, wide_len);
+  wide = long_path (wide_from_utf8 (path));
 
   h = CreateFileW (wide, GENERIC_READ,
                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -164,10 +315,12 @@ win_openat (int dirfd, char const *name, int flags)
          file that really is denied.  */
       if (err == ERROR_ACCESS_DENIED)
         return openat_safer (dirfd, name, flags);
-      errno = errno_from_win32 (err);
+      /* A wildcard that matched nothing is a missing file, not a bad name.  */
+      errno = strpbrk (name, "*?") ? ENOENT : errno_from_win32 (err);
       return -1;
     }
 
+  h = handle_byte_order_mark (h, flags);
   fd = _open_osfhandle ((intptr_t) h,
                         _O_RDONLY | (flags & O_BINARY ? _O_BINARY : _O_TEXT));
   if (fd < 0)
@@ -177,6 +330,108 @@ win_openat (int dirfd, char const *name, int flags)
       return -1;
     }
   return fd_safer (fd);
+}
+
+static char *
+utf8_from_wide (WCHAR const *wide)
+{
+  int len = WideCharToMultiByte (CP_ACP, 0, wide, -1, NULL, 0, NULL, NULL);
+  char *s = xmalloc (len);
+  WideCharToMultiByte (CP_ACP, 0, wide, -1, s, len, NULL, NULL);
+  return s;
+}
+
+static int
+compare_names (void const *a, void const *b)
+{
+  return CompareStringOrdinal (*(WCHAR *const *) a, -1,
+                               *(WCHAR *const *) b, -1, TRUE) - CSTR_EQUAL;
+}
+
+/* Append to *LIST the files matching the wildcard PATTERN, keeping any
+   directory part of it.  Return the number of files added.  */
+static size_t
+expand_wildcard (char const *pattern, char ***list, size_t *n, size_t *alloc)
+{
+  WCHAR *wide = wide_from_utf8 (pattern);
+  WIN32_FIND_DATAW found;
+  HANDLE h = FindFirstFileExW (wide, FindExInfoBasic, &found,
+                               FindExSearchNameMatch, NULL,
+                               FIND_FIRST_EX_LARGE_FETCH);
+  WCHAR **names = NULL;
+  size_t count = 0, names_alloc = 0;
+  char const *base = pattern;
+  char const *p;
+
+  free (wide);
+  if (h == INVALID_HANDLE_VALUE)
+    return 0;
+
+  for (p = pattern; *p; p++)
+    if (*p == '/' || *p == '\\' || (*p == ':' && p == pattern + 1))
+      base = p + 1;
+
+  do
+    {
+      if (wcscmp (found.cFileName, L".") == 0
+          || wcscmp (found.cFileName, L"..") == 0
+          || found.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN
+                                       | FILE_ATTRIBUTE_SYSTEM))
+        continue;
+      if (count == names_alloc)
+        names = x2nrealloc (names, &names_alloc, sizeof *names);
+      names[count++] = xmemdup (found.cFileName,
+                                (wcslen (found.cFileName) + 1)
+                                * sizeof (WCHAR));
+    }
+  while (FindNextFileW (h, &found));
+  FindClose (h);
+
+  qsort (names, count, sizeof *names, compare_names);
+
+  for (size_t i = 0; i < count; i++)
+    {
+      char *name = utf8_from_wide (names[i]);
+      size_t dirlen = base - pattern;
+      char *full = xmalloc (dirlen + strlen (name) + 1);
+      memcpy (full, pattern, dirlen);
+      strcpy (full + dirlen, name);
+      free (name);
+      free (names[i]);
+      if (*n == *alloc)
+        *list = x2nrealloc (*list, alloc, sizeof **list);
+      (*list)[(*n)++] = full;
+    }
+  free (names);
+  return count;
+}
+
+/* Windows shells leave wildcards for the program to expand.  Expand them
+   here rather than at startup, so that only file names are affected and
+   the search pattern or --include=*.c are left alone.  */
+void
+win_expand_operands (int *argc, char ***argv, int first)
+{
+  char **list = NULL;
+  size_t n = 0, alloc = 0;
+
+  for (int i = 0; i < *argc; i++)
+    {
+      char *arg = (*argv)[i];
+      if (! (first <= i && strpbrk (arg, "*?")
+             && expand_wildcard (arg, &list, &n, &alloc)))
+        {
+          if (n == alloc)
+            list = x2nrealloc (list, &alloc, sizeof *list);
+          list[n++] = arg;
+        }
+    }
+
+  if (n == alloc)
+    list = x2nrealloc (list, &alloc, sizeof *list);
+  list[n] = NULL;
+  *argc = n;
+  *argv = list;
 }
 
 int
