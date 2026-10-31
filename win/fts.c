@@ -1,3 +1,8 @@
+/* WinGrep Windows port.
+   Copyright 2026 Owen Grumbles.
+   Licensed under the GNU General Public License, version 3 or later.  */
+
+
 /* A directory walker for grep -r, built on FindFirstFileExW.
 
    This replaces gnulib's fts.c with just the parts grep uses.  Each file's

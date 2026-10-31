@@ -1,3 +1,7 @@
+/* WinGrep Windows port.
+   Copyright 2026 Owen Grumbles.
+   Licensed under the GNU General Public License, version 3 or later.  */
+
 #include <config.h>
 #include <sys/types.h>
 #include <sys/stat.h>

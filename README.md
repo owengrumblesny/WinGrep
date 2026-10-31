@@ -70,6 +70,9 @@ Exactly like grep, which is the entire pitch:
 
 ## License
 
+The Windows port is by Owen Grumbles.
+
+
 GPLv3, see [LICENSE](LICENSE), because this is built directly from GNU grep and gnulib, and the GPL is the one thing in this repo that doesn't have a sense of humor.
 
 All the hard parts are the work of the GNU grep and gnulib authors. Copyright notices remain in the source files. This version was modified in 2026 to call Windows APIs directly and to build without the GNU build system.

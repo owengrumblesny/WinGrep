@@ -1,3 +1,6 @@
+# Written by Owen Grumbles (owengrumblesny@gmail.com)
+#Under GPL 3.0 License or Later.
+
 param([switch]$Clean)
 $ErrorActionPreference = 'Stop'
 
