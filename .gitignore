@@ -1,1 +1,3 @@
 build/
+pyregex/wgre.c
+pyregex/*.pyd
