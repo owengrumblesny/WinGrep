@@ -1,0 +1,120 @@
+fnmatch.o: fnmatch.c libc-config.h ../config.h errno.h \
+ C:/msys64/ucrt64/include/errno.h C:/msys64/ucrt64/include/crtdefs.h \
+ C:/msys64/ucrt64/include/corecrt.h C:/msys64/ucrt64/include/_mingw.h \
+ C:/msys64/ucrt64/include/_mingw_mac.h \
+ C:/msys64/ucrt64/include/_mingw_secapi.h \
+ C:/msys64/ucrt64/include/vadefs.h cdefs.h fnmatch.h \
+ C:/msys64/ucrt64/include/assert.h ctype.h \
+ C:/msys64/ucrt64/include/ctype.h \
+ C:/msys64/ucrt64/include/corecrt_wctype.h string.h \
+ C:/msys64/ucrt64/include/string.h \
+ C:/msys64/ucrt64/include/corecrt_memory.h \
+ C:/msys64/ucrt64/include/corecrt_wstring.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stddef.h \
+ C:/msys64/ucrt64/include/stddef.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdckdint.h \
+ stdlib.h C:/msys64/ucrt64/include/stdlib.h \
+ C:/msys64/ucrt64/include/corecrt_malloc.h \
+ C:/msys64/ucrt64/include/corecrt_wstdlib.h limits.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/limits.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/syslimits.h \
+ C:/msys64/ucrt64/include/limits.h C:/msys64/ucrt64/include/malloc.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/mm_malloc.h \
+ C:/msys64/ucrt64/include/io.h C:/msys64/ucrt64/include/corecrt_wio.h \
+ C:/msys64/ucrt64/include/_mingw_off_t.h alloca.h wchar.h \
+ C:/msys64/ucrt64/include/wchar.h \
+ C:/msys64/ucrt64/include/corecrt_wconio.h \
+ C:/msys64/ucrt64/include/corecrt_stdio_config.h \
+ C:/msys64/ucrt64/include/corecrt_wdirect.h \
+ C:/msys64/ucrt64/include/corecrt_wprocess.h \
+ C:/msys64/ucrt64/include/corecrt_wstdio.h \
+ C:/msys64/ucrt64/include/corecrt_wtime.h sys/stat.h sys/types.h \
+ C:/msys64/ucrt64/include/sys/types.h time.h unistd.h \
+ C:/msys64/ucrt64/include/unistd.h C:/msys64/ucrt64/include/process.h \
+ C:/msys64/ucrt64/include/corecrt_startup.h \
+ C:/msys64/ucrt64/include/getopt.h \
+ C:/msys64/ucrt64/include/pthread_unistd.h \
+ C:/msys64/ucrt64/include/direct.h C:/msys64/ucrt64/include/time.h \
+ C:/msys64/ucrt64/include/sys/timeb.h C:/msys64/ucrt64/include/_timeval.h \
+ C:/msys64/ucrt64/include/pthread_time.h \
+ C:/msys64/ucrt64/include/pthread_compat.h \
+ C:/msys64/ucrt64/include/sys/stat.h \
+ C:/msys64/ucrt64/include/_mingw_stat64.h \
+ C:/msys64/ucrt64/include/_mingw_locale.h wctype.h \
+ C:/msys64/ucrt64/include/wctype.h attribute.h flexmember.h idx.h \
+ stdint.h \
+ C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdint.h \
+ C:/msys64/ucrt64/include/stdint.h fnmatch_loop.c
+libc-config.h:
+../config.h:
+errno.h:
+C:/msys64/ucrt64/include/errno.h:
+C:/msys64/ucrt64/include/crtdefs.h:
+C:/msys64/ucrt64/include/corecrt.h:
+C:/msys64/ucrt64/include/_mingw.h:
+C:/msys64/ucrt64/include/_mingw_mac.h:
+C:/msys64/ucrt64/include/_mingw_secapi.h:
+C:/msys64/ucrt64/include/vadefs.h:
+cdefs.h:
+fnmatch.h:
+C:/msys64/ucrt64/include/assert.h:
+ctype.h:
+C:/msys64/ucrt64/include/ctype.h:
+C:/msys64/ucrt64/include/corecrt_wctype.h:
+string.h:
+C:/msys64/ucrt64/include/string.h:
+C:/msys64/ucrt64/include/corecrt_memory.h:
+C:/msys64/ucrt64/include/corecrt_wstring.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stddef.h:
+C:/msys64/ucrt64/include/stddef.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdckdint.h:
+stdlib.h:
+C:/msys64/ucrt64/include/stdlib.h:
+C:/msys64/ucrt64/include/corecrt_malloc.h:
+C:/msys64/ucrt64/include/corecrt_wstdlib.h:
+limits.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/limits.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/syslimits.h:
+C:/msys64/ucrt64/include/limits.h:
+C:/msys64/ucrt64/include/malloc.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/mm_malloc.h:
+C:/msys64/ucrt64/include/io.h:
+C:/msys64/ucrt64/include/corecrt_wio.h:
+C:/msys64/ucrt64/include/_mingw_off_t.h:
+alloca.h:
+wchar.h:
+C:/msys64/ucrt64/include/wchar.h:
+C:/msys64/ucrt64/include/corecrt_wconio.h:
+C:/msys64/ucrt64/include/corecrt_stdio_config.h:
+C:/msys64/ucrt64/include/corecrt_wdirect.h:
+C:/msys64/ucrt64/include/corecrt_wprocess.h:
+C:/msys64/ucrt64/include/corecrt_wstdio.h:
+C:/msys64/ucrt64/include/corecrt_wtime.h:
+sys/stat.h:
+sys/types.h:
+C:/msys64/ucrt64/include/sys/types.h:
+time.h:
+unistd.h:
+C:/msys64/ucrt64/include/unistd.h:
+C:/msys64/ucrt64/include/process.h:
+C:/msys64/ucrt64/include/corecrt_startup.h:
+C:/msys64/ucrt64/include/getopt.h:
+C:/msys64/ucrt64/include/pthread_unistd.h:
+C:/msys64/ucrt64/include/direct.h:
+C:/msys64/ucrt64/include/time.h:
+C:/msys64/ucrt64/include/sys/timeb.h:
+C:/msys64/ucrt64/include/_timeval.h:
+C:/msys64/ucrt64/include/pthread_time.h:
+C:/msys64/ucrt64/include/pthread_compat.h:
+C:/msys64/ucrt64/include/sys/stat.h:
+C:/msys64/ucrt64/include/_mingw_stat64.h:
+C:/msys64/ucrt64/include/_mingw_locale.h:
+wctype.h:
+C:/msys64/ucrt64/include/wctype.h:
+attribute.h:
+flexmember.h:
+idx.h:
+stdint.h:
+C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdint.h:
+C:/msys64/ucrt64/include/stdint.h:
+fnmatch_loop.c:
