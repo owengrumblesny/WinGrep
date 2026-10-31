@@ -1703,6 +1703,17 @@ addtok_wc (struct dfa *dfa, wint_t wc)
   size_t stored_bytes = wcrtomb ((char *) buf, wc, &s);
   int buflen;
 
+  /* WinGrep: with a 16-bit wchar_t, mbrtowc maps everything above U+FFFF to
+     U+FFFD, so wcrtomb cannot give the character back.  Use the bytes that
+     were just read from the pattern.  The [-3] test comes first because a
+     real U+FFFD is only three bytes long.  */
+  if (wc == 0xFFFD && (dfa->lex.ptr[-3] & 0xC0) == 0x80
+      && (dfa->lex.ptr[-4] & 0xF8) == 0xF0)
+    {
+      memcpy (buf, dfa->lex.ptr - 4, 4);
+      stored_bytes = 4;
+    }
+
   if (stored_bytes != (size_t) -1)
     buflen = stored_bytes;
   else

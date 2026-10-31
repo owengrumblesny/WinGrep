@@ -31,7 +31,6 @@
 
 #include "argmatch.h"
 #include "c-ctype.h"
-#include "c-stack.h"
 #include "closeout.h"
 #include "colorize.h"
 #include "die.h"
@@ -498,7 +497,9 @@ enum
   INCLUDE_OPTION,
   LINE_BUFFERED_OPTION,
   LABEL_OPTION,
-  NO_IGNORE_CASE_OPTION
+  NO_IGNORE_CASE_OPTION,
+  SKIP_HIDDEN_OPTION,
+  SKIP_OFFLINE_OPTION
 };
 
 /* Long options equivalences. */
@@ -530,6 +531,8 @@ static struct option const long_options[] =
   {"include", required_argument, NULL, INCLUDE_OPTION},
   {"ignore-case", no_argument, NULL, 'i'},
   {"no-ignore-case", no_argument, NULL, NO_IGNORE_CASE_OPTION},
+  {"skip-hidden", no_argument, NULL, SKIP_HIDDEN_OPTION},
+  {"skip-offline", no_argument, NULL, SKIP_OFFLINE_OPTION},
   {"initial-tab", no_argument, NULL, 'T'},
   {"label", required_argument, NULL, LABEL_OPTION},
   {"line-buffered", no_argument, NULL, LINE_BUFFERED_OPTION},
@@ -672,7 +675,7 @@ suppressible_error (int errnum)
 static void
 clean_up_stdout (void)
 {
-  if (! stdout_errno)
+  if (! stdout_errno && (fflush (stdout) == 0 || ! win_stdout_closed ()))
     close_stdout ();
 }
 
@@ -1343,6 +1346,9 @@ prline (char *beg, char *lim, char sep)
   if (line_buffered)
     fflush_errno ();
 
+  /* Windows has no SIGPIPE to end us quietly when the reader goes away.  */
+  if (stdout_errno && win_stdout_closed ())
+    exit (EXIT_TROUBLE);
   if (stdout_errno)
     die (EXIT_TROUBLE, stdout_errno, _("write error"));
 
@@ -2037,6 +2043,8 @@ Output control:\n\
       --exclude=GLOB        skip files that match GLOB\n\
       --exclude-from=FILE   skip files that match any file pattern from FILE\n\
       --exclude-dir=GLOB    skip directories that match GLOB\n\
+      --skip-hidden         with -r, skip hidden and system files\n\
+      --skip-offline        with -r, skip cloud files not on this PC\n\
 "));
       printf (_("\
   -L, --files-without-match  print only names of FILEs with no selected lines\n\
@@ -2501,7 +2509,7 @@ main (int argc, char **argv)
   init_localeinfo (&localeinfo);
 
   atexit (clean_up_stdout);
-  c_stack_action (NULL);
+  win_stack_guard ();
 
   last_recursive = 0;
 
@@ -2667,6 +2675,14 @@ main (int argc, char **argv)
 
       case NO_IGNORE_CASE_OPTION:
         match_icase = false;
+        break;
+
+      case SKIP_HIDDEN_OPTION:
+        win_skip_hidden = true;
+        break;
+
+      case SKIP_OFFLINE_OPTION:
+        win_skip_offline = true;
         break;
 
       case 'L':

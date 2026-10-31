@@ -11,31 +11,131 @@
 #include <io.h>
 #include <windows.h>
 #include <winternl.h>
+#include "colorize.h"
 #include "compat.h"
 #include "fcntl-safer.h"
 #include "filename.h"
 #include "unistd-safer.h"
 #include "xalloc.h"
 
+bool win_skip_hidden;
+bool win_skip_offline;
+
 static UINT saved_console_cp;
+static DWORD saved_console_mode;
+static HANDLE vt_console = INVALID_HANDLE_VALUE;
 
 static void
 restore_console (void)
 {
   if (saved_console_cp)
     SetConsoleOutputCP (saved_console_cp);
+  if (vt_console != INVALID_HANDLE_VALUE)
+    SetConsoleMode (vt_console, saved_console_mode);
 }
 
-/* The console code page belongs to the terminal and outlives this process,
-   so put it back on the way out.  */
+/* Ctrl+C ends the process without running atexit handlers.  */
+static BOOL WINAPI
+console_ctrl_handler (DWORD type)
+{
+  (void) type;
+  restore_console ();
+  ExitProcess (130);
+}
+
+/* The console code page and mode belong to the terminal and outlive this
+   process, so put them back on the way out, however that happens.  */
 void
 win_init (void)
 {
   saved_console_cp = GetConsoleOutputCP ();
   if (saved_console_cp && SetConsoleOutputCP (CP_UTF8))
-    atexit (restore_console);
+    {
+      atexit (restore_console);
+      SetConsoleCtrlHandler (console_ctrl_handler, TRUE);
+    }
   else
     saved_console_cp = 0;
+}
+
+static LONG WINAPI
+stack_overflow_handler (EXCEPTION_POINTERS *info)
+{
+  static char const message[] = ": stack overflow\n";
+  char const *name = getprogname ();
+  HANDLE err = GetStdHandle (STD_ERROR_HANDLE);
+  DWORD wrote;
+
+  if (info->ExceptionRecord->ExceptionCode != EXCEPTION_STACK_OVERFLOW)
+    return EXCEPTION_CONTINUE_SEARCH;
+
+  WriteFile (err, name, strlen (name), &wrote, NULL);
+  WriteFile (err, message, sizeof message - 1, &wrote, NULL);
+  restore_console ();
+  TerminateProcess (GetCurrentProcess (), 2);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+/* A runaway regex overflows the stack.  Leave enough stack in reserve for
+   the handler to report that, rather than dying without a word.  */
+void
+win_stack_guard (void)
+{
+  ULONG reserve = 64 * 1024;
+  SetThreadStackGuarantee (&reserve);
+  AddVectoredExceptionHandler (1, stack_overflow_handler);
+}
+
+/* Return true if the reader of a stdout pipe has gone away.  A zero-byte
+   write is the one test that works: the C runtime reports this condition
+   as either EPIPE or EINVAL, depending on when it is noticed.  */
+bool
+win_stdout_closed (void)
+{
+  HANDLE h = (HANDLE) _get_osfhandle (STDOUT_FILENO);
+  DWORD wrote;
+
+  if (h == INVALID_HANDLE_VALUE || GetFileType (h) != FILE_TYPE_PIPE)
+    return false;
+  if (WriteFile (h, "", 0, &wrote, NULL))
+    return false;
+  return (GetLastError () == ERROR_NO_DATA
+          || GetLastError () == ERROR_BROKEN_PIPE);
+}
+
+int
+should_colorize (void)
+{
+  char const *t = getenv ("TERM");
+  return ! (t && strcmp (t, "dumb") == 0);
+}
+
+/* Modern consoles understand the same escape sequences as a Unix terminal,
+   once asked to.  That gives grep its full range of colors.  */
+void
+init_colorize (void)
+{
+  HANDLE h = GetStdHandle (STD_OUTPUT_HANDLE);
+  DWORD mode;
+
+  if (GetConsoleMode (h, &mode)
+      && SetConsoleMode (h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    {
+      vt_console = h;
+      saved_console_mode = mode;
+    }
+}
+
+void
+print_start_colorize (char const *sgr_start, char const *sgr_seq)
+{
+  printf (sgr_start, sgr_seq);
+}
+
+void
+print_end_colorize (char const *sgr_end)
+{
+  fputs (sgr_end, stdout);
 }
 
 long
@@ -188,6 +288,27 @@ long_path (WCHAR *wide)
   return result;
 }
 
+wchar_t *
+win_wide_path (char const *path)
+{
+  return long_path (wide_from_utf8 (path));
+}
+
+char *
+win_utf8_from_wide (wchar_t const *wide)
+{
+  int len = WideCharToMultiByte (CP_ACP, 0, wide, -1, NULL, 0, NULL, NULL);
+  char *s = xmalloc (len);
+  WideCharToMultiByte (CP_ACP, 0, wide, -1, s, len, NULL, NULL);
+  return s;
+}
+
+int
+win_errno (unsigned long err)
+{
+  return errno_from_win32 (err);
+}
+
 /* Copy UTF-16 file H, whose read position is just past its byte order mark,
    into a temporary UTF-8 file.  Grep works on bytes and would otherwise see
    every other byte as NUL.  Return the new handle after closing H, or
@@ -299,11 +420,11 @@ win_openat (int dirfd, char const *name, int flags)
       path = joined;
     }
 
-  wide = long_path (wide_from_utf8 (path));
+  wide = win_wide_path (path);
 
   h = CreateFileW (wide, GENERIC_READ,
                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+                   NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
   err = GetLastError ();
   free (wide);
   free (joined);
@@ -330,15 +451,6 @@ win_openat (int dirfd, char const *name, int flags)
       return -1;
     }
   return fd_safer (fd);
-}
-
-static char *
-utf8_from_wide (WCHAR const *wide)
-{
-  int len = WideCharToMultiByte (CP_ACP, 0, wide, -1, NULL, 0, NULL, NULL);
-  char *s = xmalloc (len);
-  WideCharToMultiByte (CP_ACP, 0, wide, -1, s, len, NULL, NULL);
-  return s;
 }
 
 static int
@@ -391,7 +503,7 @@ expand_wildcard (char const *pattern, char ***list, size_t *n, size_t *alloc)
 
   for (size_t i = 0; i < count; i++)
     {
-      char *name = utf8_from_wide (names[i]);
+      char *name = win_utf8_from_wide (names[i]);
       size_t dirlen = base - pattern;
       char *full = xmalloc (dirlen + strlen (name) + 1);
       memcpy (full, pattern, dirlen);

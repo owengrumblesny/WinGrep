@@ -8,16 +8,16 @@ try {
 
     # Our code: warnings on.
     $Sources = @('src\grep.c', 'src\dfasearch.c', 'src\kwsearch.c',
-                 'src\kwset.c', 'src\searchutils.c', 'win\compat.c')
+                 'src\kwset.c', 'src\searchutils.c', 'win\compat.c', 'win\fts.c')
 
     # Inherited gnulib code: warnings off.
     $LibSources = @(
-        'argmatch', 'basename-lgpl', 'c-stack', 'c-strcasecmp', 'calloc',
+        'argmatch', 'basename-lgpl', 'c-strcasecmp', 'calloc',
         'chdir-long', 'cloexec', 'close', 'close-stream', 'closedir',
-        'closeout', 'colorize-w32', 'cycle-check', 'dfa', 'dirfd', 'dup',
+        'closeout', 'cycle-check', 'dfa', 'dirfd', 'dup',
         'dup-safer', 'dup2', 'error', 'exclude', 'exitfail', 'fchdir', 'fcntl',
         'fd-hook', 'fd-safer', 'fdopendir', 'filenamecat-lgpl', 'fnmatch',
-        'fopen', 'fpending', 'free', 'fstat', 'fstatat', 'fts', 'getcwd-lgpl',
+        'fopen', 'fpending', 'free', 'fstat', 'fstatat', 'getcwd-lgpl',
         'getdtablesize', 'getprogname', 'hash', 'i-ring', 'localcharset',
         'localeconv', 'localeinfo', 'lseek', 'malloc', 'malloc\dynarray_resize',
         'malloca', 'mbchar', 'mbrlen', 'mbrtowc', 'mbscasecmp', 'mbsinit',
