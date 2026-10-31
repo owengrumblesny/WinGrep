@@ -1836,7 +1836,7 @@ grepdesc (int desc, bool command_line)
     }
 
   if (desc != STDIN_FILENO && skip_devices (command_line)
-      && is_device_mode (st.st_mode))
+      && win_is_device (desc))
     goto closeout;
 
   if (desc != STDIN_FILENO && command_line
@@ -1882,7 +1882,7 @@ grepdesc (int desc, bool command_line)
       && ((directories == SKIP_DIRECTORIES && S_ISDIR (st.st_mode))
           || ((devices == SKIP_DEVICES
                || (devices == READ_COMMAND_LINE_DEVICES && !command_line))
-              && is_device_mode (st.st_mode))))
+              && win_is_device (desc))))
     goto closeout;
 
   /* If there is a regular file on stdout and the current file refers
