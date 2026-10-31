@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $Build = Join-Path $PSScriptRoot 'build'
 $Flags = @('-O2', '-Wall', '-DHAVE_CONFIG_H', '-Iwin', '-Ilib', '-Isrc')
 $Sources = @('src\grep.c', 'src\dfasearch.c', 'src\kwsearch.c',
-             'src\kwset.c', 'src\searchutils.c')
+             'src\kwset.c', 'src\searchutils.c', 'win\compat.c')
 # Add the lib\*.c files listed in build.log
 
 if ($Clean) { Remove-Item $Build -Recurse -Force -ErrorAction Ignore }

@@ -52,6 +52,7 @@
 #include "xalloc.h"
 #include "xbinary-io.h"
 #include "xstrtol.h"
+#include "compat.h"
 
 enum { SEP_CHAR_SELECTED = ':' };
 enum { SEP_CHAR_REJECTED = '-' };
@@ -2911,8 +2912,8 @@ main (int argc, char **argv)
     return EXIT_FAILURE;
 
   if (color_option == 2)
-    color_option = possibly_tty && should_colorize () && isatty (STDOUT_FILENO);
-  init_colorize ();
+    color_option = possibly_tty && should_colorize () && win_isatty (STDOUT_FILENO);
+init_colorize ();
 
   if (color_option)
     {
@@ -2990,11 +2991,15 @@ main (int argc, char **argv)
     xset_binary_mode (STDOUT_FILENO, O_BINARY);
 
   /* Prefer sysconf for page size, as getpagesize typically returns int.  */
-#ifdef _SC_PAGESIZE
+
+#ifdef _WIN32
+  long psize = win_page_size ();
+#elif defined _SC_PAGESIZE
   long psize = sysconf (_SC_PAGESIZE);
 #else
   long psize = getpagesize ();
 #endif
+
   if (! (0 < psize && psize <= (IDX_MAX - uword_size) / 2))
     abort ();
   pagesize = psize;
