@@ -43,7 +43,9 @@ struct frame
   FTSENT **entries;
   size_t count;
   size_t next;
+  char const *path;
   struct file_id id;
+  bool identified;
 };
 
 struct walker
@@ -81,14 +83,21 @@ identify_directory (char const *path, struct file_id *id)
 }
 
 /* Return true if the directory ID is one we are already inside.  Following
-   links can lead back to a parent, and from there around forever.  */
+   links can lead back to a parent, and from there around forever.  IDs are
+   looked up here, and only once a link turns up, because opening every
+   folder would slow down trees that have no links at all.  */
 static bool
-is_active_directory (struct walker const *w, struct file_id const *id)
+is_active_directory (struct walker *w, struct file_id const *id)
 {
   for (size_t i = 0; i < w->depth; i++)
-    if (w->frames[i].id.volume == id->volume
-        && w->frames[i].id.index == id->index)
-      return true;
+    {
+      struct frame *f = &w->frames[i];
+      if (! f->identified)
+        f->identified = identify_directory (f->path, &f->id);
+      if (f->identified && f->id.volume == id->volume
+          && f->id.index == id->index)
+        return true;
+    }
   return false;
 }
 
@@ -152,7 +161,9 @@ classify (struct walker *w, FTSENT *ent, DWORD attributes, DWORD tag)
 
   ent->fts_statp->st_mode = directory ? _S_IFDIR : _S_IFREG;
 
-  if (link && ! (w->fts.fts_options & FTS_LOGICAL))
+  //if (link && ! (w->fts.fts_options & FTS_LOGICAL))
+if (link && tag == IO_REPARSE_TAG_SYMLINK
+      && ! (w->fts.fts_options & FTS_LOGICAL))
     {
       ent->fts_info = FTS_SL;
       return true;
@@ -187,7 +198,12 @@ enter_directory (struct walker *w, FTSENT *ent)
   WIN32_FIND_DATAW found;
   HANDLE h;
   DWORD err = 0;
-  struct frame frame = { NULL, 0, 0, { 0, 0 } };
+  //struct frame frame = { NULL, 0, 0, { 0, 0 } };
+    struct frame frame = { .path = ent->fts_path }; 
+	
+	//reads files by path? idk. 
+	//instead of doing it through null values like the original.
+	
   size_t alloc = 0;
 
   memcpy (pattern, ent->fts_path, pathlen);
@@ -206,6 +222,13 @@ enter_directory (struct walker *w, FTSENT *ent)
   if (err)
     return win_errno (err);
 
+  /* Go on the stack before listing, so that a link inside this directory
+     pointing back at it is recognized.  */
+  if (w->depth == w->frames_alloc)
+    w->frames = x2nrealloc (w->frames, &w->frames_alloc, sizeof *w->frames);
+  w->frames[w->depth++] = frame;
+
+  
   do
     {
       char *name;
@@ -237,17 +260,18 @@ enter_directory (struct walker *w, FTSENT *ent)
   FindClose (h);
   if (err != ERROR_NO_MORE_FILES)
     {
+      w->depth--;
       free_entries (frame.entries, frame.count);
       return win_errno (err);
     }
 
-  if (w->fts.fts_options & FTS_LOGICAL)
-    identify_directory (ent->fts_path, &frame.id);
+/* Folder IDs are looked up by is_active_directory, and only once a link
+   turns up.  Opening every folder here would slow down trees that have
+   no links at all.  */
 
-  if (w->depth == w->frames_alloc)
-    w->frames = x2nrealloc (w->frames, &w->frames_alloc, sizeof *w->frames);
-  w->frames[w->depth++] = frame;
-  return 0;
+  w->frames[w->depth - 1].entries = frame.entries;
+  w->frames[w->depth - 1].count = frame.count;
+return 0;
 }
 
 FTS *
@@ -333,16 +357,12 @@ fts_read (FTS *fts)
       else if (w->next_root < w->root_count)
         {
           fts->fts_cur = w->roots[w->next_root++];
-          if (fts->fts_options & FTS_LOGICAL)
-            {
-              /* Remember the root so that links back to it are caught.  */
-              struct frame sentinel = { NULL, 0, 0, { 0, 0 } };
-              identify_directory (fts->fts_cur->fts_path, &sentinel.id);
-              if (w->depth == w->frames_alloc)
-                w->frames = x2nrealloc (w->frames, &w->frames_alloc,
-                                        sizeof *w->frames);
-              w->frames[w->depth++] = sentinel;
-            }
+          /* Remember the root so that links back to it are caught.  */
+          struct frame root = { .path = fts->fts_cur->fts_path };
+          if (w->depth == w->frames_alloc)
+            w->frames = x2nrealloc (w->frames, &w->frames_alloc,
+                                    sizeof *w->frames);
+          w->frames[w->depth++] = root;
           return fts->fts_cur;
         }
       else
@@ -370,7 +390,7 @@ fts_close (FTS *fts)
   while (w->depth)
     {
       struct frame *top = &w->frames[--w->depth];
-      if (top->entries)
+      
         free_entries (top->entries, top->count);
     }
   free (w->frames);
