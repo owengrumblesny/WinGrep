@@ -1,27 +1,57 @@
 param([switch]$Clean)
 $ErrorActionPreference = 'Stop'
 
-$Build = Join-Path $PSScriptRoot 'build'
-$Flags = @('-O2', '-Wall', '-DHAVE_CONFIG_H', '-Iwin', '-Ilib', '-Isrc')
-$Sources = @('src\grep.c', 'src\dfasearch.c', 'src\kwsearch.c',
-             'src\kwset.c', 'src\searchutils.c', 'win\compat.c')
-# Add the lib\*.c files listed in build.log
+Push-Location $PSScriptRoot
+try {
+    $Build = 'build'
+    $Flags = @('-O2', '-DHAVE_CONFIG_H', '-Iwin', '-Ilib', '-Isrc')
 
-if ($Clean) { Remove-Item $Build -Recurse -Force -ErrorAction Ignore }
-New-Item -ItemType Directory -Force $Build | Out-Null
+    # Our code: warnings on.
+    $Sources = @('src\grep.c', 'src\dfasearch.c', 'src\kwsearch.c',
+                 'src\kwset.c', 'src\searchutils.c', 'win\compat.c')
 
-$objects = foreach ($src in $Sources) {
-    $obj = Join-Path $Build (($src -replace '\\', '_') -replace '\.c$', '.o')
-    $stale = -not (Test-Path $obj) -or
-             (Get-Item $src).LastWriteTime -gt (Get-Item $obj).LastWriteTime
-    if ($stale) {
-        Write-Host "CC $src"
-        & gcc @Flags -c $src -o $obj
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # Inherited gnulib code: warnings off.
+    $LibSources = @(
+        'argmatch', 'basename-lgpl', 'c-stack', 'c-strcasecmp', 'calloc',
+        'chdir-long', 'cloexec', 'close', 'close-stream', 'closedir',
+        'closeout', 'colorize-w32', 'cycle-check', 'dfa', 'dirfd', 'dup',
+        'dup-safer', 'dup2', 'error', 'exclude', 'exitfail', 'fchdir', 'fcntl',
+        'fd-hook', 'fd-safer', 'fdopendir', 'filenamecat-lgpl', 'fnmatch',
+        'fopen', 'fpending', 'free', 'fstat', 'fstatat', 'fts', 'getcwd-lgpl',
+        'getdtablesize', 'getprogname', 'hash', 'i-ring', 'localcharset',
+        'localeconv', 'localeinfo', 'lseek', 'malloc', 'malloc\dynarray_resize',
+        'malloca', 'mbchar', 'mbrlen', 'mbrtowc', 'mbscasecmp', 'mbsinit',
+        'memchr2', 'memrchr', 'msvc-inval', 'msvc-nothrow', 'nl_langinfo',
+        'obstack', 'open', 'open-safer', 'openat', 'openat-die', 'openat-proc',
+        'openat-safer', 'opendir', 'opendirat', 'quotearg', 'rawmemchr', 'read',
+        'realloc', 'reallocarray', 'regex', 'safe-read', 'save-cwd',
+        'setlocale_null', 'stat', 'stat-w32', 'stpcpy', 'strdup',
+        'strerror', 'strerror-override', 'stripslash', 'strnlen1', 'strstr',
+        'uniwidth\width', 'version-etc', 'version-etc-fsf', 'wcrtomb',
+        'wcwidth', 'xalloc-die', 'xbinary-io', 'xmalloc', 'xstrtoimax'
+    ) | ForEach-Object { "lib\$_.c" }
+
+    if ($Clean) { Remove-Item $Build -Recurse -Force -ErrorAction Ignore }
+    New-Item -ItemType Directory -Force $Build | Out-Null
+
+    function Build-Object ($src, $extra) {
+        $obj = Join-Path $Build (($src -replace '\\', '_') -replace '\.c$', '.o')
+        $stale = -not (Test-Path $obj) -or
+                 (Get-Item $src).LastWriteTime -gt (Get-Item $obj).LastWriteTime
+        if ($stale) {
+            Write-Host "CC $src"
+            & gcc @Flags @extra -c $src -o $obj
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        $obj
     }
-    $obj
-}
 
-$Lib = 'lib\libgreputils.a'
-& gcc @objects $Lib $Lib -liconv -lntdll -static '-Wl,--stack,8388608' -o (Join-Path $Build 'grep.exe')
-if ($LASTEXITCODE -ne 0) { Write-Host "Link failed" -ForegroundColor Red; exit $LASTEXITCODE }
+    $objects = @($Sources | ForEach-Object { Build-Object $_ @('-Wall') })
+    $objects += @($LibSources | ForEach-Object { Build-Object $_ @('-w') })
+
+    & gcc @objects -liconv -lntdll -static '-Wl,--stack,8388608' -o (Join-Path $Build 'grep.exe')
+    if ($LASTEXITCODE -ne 0) { Write-Host "Link failed" -ForegroundColor Red; exit $LASTEXITCODE }
+}
+finally {
+    Pop-Location
+}
