@@ -2,13 +2,19 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <io.h>
 #include <windows.h>
 #include <winternl.h>
 #include "compat.h"
+#include "fcntl-safer.h"
+#include "filename.h"
+#include "unistd-safer.h"
+#include "xalloc.h"
 
 long
 win_page_size (void)
@@ -86,6 +92,91 @@ win_fstat (int fd, struct stat *st)
   st->st_dev = info.dwVolumeSerialNumber;
   st->st_ino = ((ino_t) info.nFileIndexHigh << 32) | info.nFileIndexLow;
   return 0;
+}
+
+static int
+errno_from_win32 (DWORD err)
+{
+  switch (err)
+    {
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+    case ERROR_BAD_PATHNAME:
+    case ERROR_INVALID_DRIVE:
+    case ERROR_BAD_NETPATH:
+    case ERROR_BAD_NET_NAME:
+      return ENOENT;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_SHARING_VIOLATION:
+    case ERROR_LOCK_VIOLATION:
+      return EACCES;
+    case ERROR_FILENAME_EXCED_RANGE:
+      return ENAMETOOLONG;
+    case ERROR_TOO_MANY_OPEN_FILES:
+      return EMFILE;
+    case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_OUTOFMEMORY:
+      return ENOMEM;
+    default:
+      /* The C runtime's open reports anything else this way too.  */
+      return EINVAL;
+    }
+}
+
+int
+win_openat (int dirfd, char const *name, int flags)
+{
+  char *joined = NULL;
+  char const *path = name;
+  WCHAR *wide;
+  int wide_len;
+  int fd;
+  HANDLE h;
+  DWORD err;
+
+  if (strcmp (name, "/dev/null") == 0)
+    path = "NUL";
+  else if (dirfd != AT_FDCWD && ! IS_ABSOLUTE_FILE_NAME (name))
+    {
+      char const *dir = _gl_directory_name (dirfd);
+      if (! dir)
+        return openat_safer (dirfd, name, flags);
+      joined = xmalloc (strlen (dir) + strlen (name) + 2);
+      stpcpy (stpcpy (stpcpy (joined, dir), "\\"), name);
+      path = joined;
+    }
+
+  wide_len = MultiByteToWideChar (CP_ACP, 0, path, -1, NULL, 0);
+  wide = xnmalloc (wide_len, sizeof *wide);
+  MultiByteToWideChar (CP_ACP, 0, path, -1, wide, wide_len);
+
+  h = CreateFileW (wide, GENERIC_READ,
+                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  err = GetLastError ();
+  free (wide);
+  free (joined);
+
+  if (h == INVALID_HANDLE_VALUE)
+    {
+      /* CreateFileW also says "access denied" for a directory.  gnulib
+         turns that case into a dummy descriptor, and sets errno for a
+         file that really is denied.  */
+      if (err == ERROR_ACCESS_DENIED)
+        return openat_safer (dirfd, name, flags);
+      errno = errno_from_win32 (err);
+      return -1;
+    }
+
+  fd = _open_osfhandle ((intptr_t) h,
+                        _O_RDONLY | (flags & O_BINARY ? _O_BINARY : _O_TEXT));
+  if (fd < 0)
+    {
+      CloseHandle (h);
+      errno = EMFILE;
+      return -1;
+    }
+  return fd_safer (fd);
 }
 
 int

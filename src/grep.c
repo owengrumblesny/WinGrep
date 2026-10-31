@@ -1757,7 +1757,7 @@ grepfile (int dirdesc, char const *name, bool follow, bool command_line)
                   (binary ? O_BINARY : 0))
                | (follow ? 0 : O_NOFOLLOW)
                | (skip_devices (command_line) ? O_NONBLOCK : 0));
-  int desc = openat_safer (dirdesc, name, oflag);
+  int desc = win_openat (dirdesc, name, oflag);
   if (desc < 0)
     {
       if (follow || ! open_symlink_nofollow_error (errno))
