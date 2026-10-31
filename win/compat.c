@@ -1,4 +1,10 @@
+#include <config.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 #include <io.h>
 #include <windows.h>
 #include <winternl.h>
@@ -39,6 +45,47 @@ win_is_device (int fd)
   type = GetFileType (h);
   result = type == FILE_TYPE_CHAR || type == FILE_TYPE_PIPE;
   return result;
+}
+
+int
+win_fstat (int fd, struct stat *st)
+{
+  HANDLE h = (HANDLE) _get_osfhandle (fd);
+  BY_HANDLE_FILE_INFORMATION info;
+  DWORD type;
+
+  /* Windows cannot open a directory as a descriptor, so gnulib's open
+     returns a dummy one and remembers the name.  Only gnulib can stat it.  */
+  if (_gl_directory_name (fd))
+    return fstat (fd, st);
+
+  if (h == INVALID_HANDLE_VALUE)
+    {
+      errno = EBADF;
+      return -1;
+    }
+
+  memset (st, 0, sizeof *st);
+  type = GetFileType (h);
+  if (type == FILE_TYPE_CHAR || type == FILE_TYPE_PIPE)
+    {
+      st->st_mode = type == FILE_TYPE_CHAR ? _S_IFCHR : _S_IFIFO;
+      return 0;
+    }
+
+  if (! GetFileInformationByHandle (h, &info))
+    {
+      errno = GetLastError () == ERROR_ACCESS_DENIED ? EACCES : EIO;
+      return -1;
+    }
+
+  st->st_mode = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY
+                 ? _S_IFDIR : _S_IFREG);
+  st->st_size = ((off_t) info.nFileSizeHigh << 32) | info.nFileSizeLow;
+  st->st_nlink = info.nNumberOfLinks;
+  st->st_dev = info.dwVolumeSerialNumber;
+  st->st_ino = ((ino_t) info.nFileIndexHigh << 32) | info.nFileIndexLow;
+  return 0;
 }
 
 int

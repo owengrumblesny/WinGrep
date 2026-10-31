@@ -1829,7 +1829,7 @@ grepdesc (int desc, bool command_line)
      example, normally DESC is a directory only at the top level, but
      there is an exception if some other process substitutes a
      directory for a non-directory while 'grep' is running.  */
-  if (fstat (desc, &st) != 0)
+  if (win_fstat (desc, &st) != 0)
     {
       suppressible_error (errno);
       goto closeout;
@@ -2873,7 +2873,7 @@ main (int argc, char **argv)
 
   bool possibly_tty = false;
   struct stat tmp_stat;
-  if (! exit_on_match && fstat (STDOUT_FILENO, &tmp_stat) == 0)
+  if (! exit_on_match && win_fstat (STDOUT_FILENO, &tmp_stat) == 0)
     {
       if (S_ISREG (tmp_stat.st_mode))
         out_stat = tmp_stat;
